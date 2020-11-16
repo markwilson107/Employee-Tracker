@@ -31,6 +31,24 @@ connection.connect(function (err) {
     init();
 });
 
+// Async Get Managers
+async function getManagersAsync(array) {
+    let managers = [];
+    for (let i = 0; i < array.length; i++) {
+        await managers.push(array[i].manager)
+    }
+    return managers
+}
+
+// Async Get Departments
+async function getDepartmentsAsync(array) {
+    let departments = [];
+    for (let i = 0; i < array.length; i++) {
+        await departments.push(array[i].name)
+    }
+    return departments
+}
+
 // Start Application
 function init() {
     console.log("------------------------------------------------------------------------------");
@@ -70,13 +88,13 @@ function initMenu() {
             switch (response.initMenu) {
 
                 case "View All Employees":
-                    return queryEmployees("all");
+                    return queryEmployees("", "");
 
                 case "View All Employees By Department":
-                    return queryEmployees("department");
+                    return employeeByDepartment();
 
                 case "View All Employees By Manager":
-                    return queryEmployees("manager");
+                    return employeeByManager();
 
                 case "Exit":
                     return connection.end();
@@ -85,78 +103,76 @@ function initMenu() {
 
 }
 
-// Show Employees
-function queryEmployees(filter) {
+// Query Employees
+function queryEmployees(type, filter) {
 
-    // All employees
-    if (filter === "all") {
-        let query = "SELECT employee.id, employee.first_name, employee.last_name, role.title, role.salary, role.department_id, employee.manager_id, department.name FROM employee "
-        query += "INNER JOIN role ON (employee.role_id = role.id) INNER JOIN department ON (role.department_id = department.id) ORDER BY employee.id ASC;";
-        connection.query(query, function (err, res) {
-            if (err) throw err;
-            //console.log(res);
-            let employeeArray = [];
-            let manager = "";
-            res.forEach(employee => {
-                if (employee.manager_id != null) {
-                    manager = `${res[employee.manager_id].first_name} ${res[employee.manager_id].last_name}`
-                } else {
-                    manager = "null"
-                }
-                const newEmployee = new Employee(employee.id, employee.first_name, employee.last_name, employee.title, employee.name, employee.salary, manager);
-                employeeArray.push(newEmployee);
-            });
-            console.table(employeeArray);
-            initMenu();
-        });
+    let query = "SELECT e.id, e.first_name, e.last_name, title, name, salary, CONCAT_WS(' ', e2.first_name, e2.last_name) manager FROM employee e ";
+    query += "INNER JOIN role ";
+    query += "ON role_id = role.id ";
+    query += "INNER JOIN department ";
+    query += "ON role.department_id = department.id ";
+    query += "LEFT JOIN employee e2 ON e.manager_id = e2.id ";
+    if (type === "manager") {
+        query += "WHERE CONCAT_WS(' ', e2.first_name, e2.last_name) = ? ";
     }
-
-    // Employees by manager
-    if (filter === "manager") {
-        let query = "SELECT employee.id, employee.first_name, employee.last_name, role.title, role.salary, role.department_id, employee.manager_id, department.name FROM employee "
-        query += "INNER JOIN role ON (employee.role_id = role.id) INNER JOIN department ON (role.department_id = department.id) ORDER BY employee.id ASC;";
-        connection.query(query, function (err, res) {
-            if (err) throw err;
-            //console.log(res);
-            let employeeArray = [];
-            let manager = "";
-            res.forEach(employee => {
-                if (employee.manager_id != null) {
-                    manager = `${res[employee.manager_id].first_name} ${res[employee.manager_id].last_name}`
-                } else {
-                    manager = "null"
-                }
-                const newEmployee = new Employee(employee.id, employee.first_name, employee.last_name, employee.title, employee.name, employee.salary, manager);
-                employeeArray.push(newEmployee);
-            });
-            console.table(employeeArray);
-            initMenu();
-        });
+    else if (type === "department") {
+        query += "WHERE name = ? ";
     }
-
-    // Employees by department
-    if (filter === "department") {
-        let query = "SELECT employee.id, employee.first_name, employee.last_name, role.title, role.salary, role.department_id, employee.manager_id, department.name FROM employee "
-        query += "INNER JOIN role ON (employee.role_id = role.id) INNER JOIN department ON (role.department_id = department.id) ORDER BY employee.id ASC;";
-        connection.query(query, function (err, res) {
-            if (err) throw err;
-            //console.log(res);
-            let employeeArray = [];
-            let manager = "";
-            res.forEach(employee => {
-                if (employee.manager_id != null) {
-                    manager = `${res[employee.manager_id].first_name} ${res[employee.manager_id].last_name}`
-                } else {
-                    manager = "null"
-                }
-                const newEmployee = new Employee(employee.id, employee.first_name, employee.last_name, employee.title, employee.name, employee.salary, manager);
-                employeeArray.push(newEmployee);
-            });
-            console.table(employeeArray);
-            initMenu();
+    query += "ORDER BY e.id ASC";
+    connection.query(query, [filter], (err, res) => {
+        if (err) throw err;
+        //console.log(res);
+        let employeeArray = [];
+        res.forEach(employee => {
+            const newEmployee = new Employee(employee.id, employee.first_name, employee.last_name, employee.title, employee.name, employee.salary, employee.manager);
+            employeeArray.push(newEmployee);
         });
-    }
+        console.table(employeeArray);
+        initMenu();
+    });
+}
 
+// Get Employee by Manager
+function employeeByManager() {
+    let query = "SELECT DISTINCT CONCAT_WS(' ', e2.first_name, e2.last_name) manager FROM employee e ";
+    query += "INNER JOIN employee e2 ON e.manager_id = e2.id ";
+    query += "ORDER BY e.id ASC";
+    connection.query(query, (err, res) => {
+        // Get managers asynchronously 
+        getManagersAsync(res).then((result) => {
+            //console.log(result);
+            inquirer
+                .prompt({
+                    name: "selManager",
+                    type: "list",
+                    message: "Selected A Manager To Filter By:",
+                    choices: result
+                }).then(response => {
+                    queryEmployees("manager", response.selManager);
+                });
+        });
+    });
+}
+
+// Get Employee by Department
+function employeeByDepartment() {
+    let query = "SELECT name FROM department ";
+    query += "ORDER BY id ASC";
+    connection.query(query, (err, res) => {
+        // Get managers asynchronously 
+        getDepartmentsAsync(res).then((result) => {
+            //console.log(result);
+            inquirer
+                .prompt({
+                    name: "selDepartment",
+                    type: "list",
+                    message: "Selected A Department To Filter By:",
+                    choices: result
+                }).then(response => {
+                    queryEmployees("department", response.selDepartment);
+                });
+        });
+    });
 }
 
 // Create Employee
@@ -166,7 +182,7 @@ function addEmployee() {
 
 // Remove Employee
 function removeEmployee() {
-    
+
 }
 
 // Update Employee
@@ -177,5 +193,5 @@ function updateEmployee(type) {
 
     if (type === "manager") {
 
-    }    
+    }
 }
