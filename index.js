@@ -2,32 +2,63 @@
 var mysql = require("mysql");
 const inquirer = require("inquirer");
 const cTable = require("console.table");
+const fs = require('fs');
 require("dotenv").config();
 
 // CLASSES
 const Employee = require("./lib/Employee");
 
 // MYSQL SETUP
-var connection = mysql.createConnection({
-    host: "localhost",
+// Check if .env exists, if not create it
+if (!fs.existsSync('./.env')) {
+    inquirer
+        .prompt([
+            {
+                type: "input",
+                message: "Please enter name of database:",
+                name: "dbName"
+            },
+            {
+                type: "password",
+                message: "Please enter password for database:",
+                name: "dbPass"
+            }
+        ]).then(response => {
 
-    // Your port; if not 3306
-    port: 3306,
+            fs.writeFile('./.env', 'DB_NAME=' + response.dbName + '\nDB_PASS=' + response.dbPass, function (err) {
+                if (err) throw err;
+                connectDb();
+            });
+        });
 
-    // Your username
-    user: "root",
-
-    // Your password
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME
-});
+} else {
+    connectDb();
+}
 
 // Connect to database
-connection.connect(function (err) {
-    if (err) throw err;
-    console.log("connected as id " + connection.threadId);
-    init();
-});
+function connectDb() {
+
+    var connection = mysql.createConnection({
+        host: "localhost",
+
+        // Your port; if not 3306
+        port: 3306,
+
+        // Your username
+        user: "root",
+
+        // Your password
+        password: process.env.DB_PASS,
+        database: process.env.DB_NAME
+    });
+
+    connection.connect(function (err) {
+        if (err) throw err;
+        console.log("connected as id " + connection.threadId);
+        init();
+    });
+
+}
 
 // Async Get Managers
 async function getManagersAsync(array) {
@@ -120,6 +151,8 @@ function initMenu() {
                 "Add Role",
                 "Remove Role",
                 new inquirer.Separator(),
+                "Total Utilized Budget By Department",
+                new inquirer.Separator(),
                 "Exit",
                 new inquirer.Separator()
             ]
@@ -164,6 +197,9 @@ function initMenu() {
 
                 case "Remove Role":
                     return removeRole();
+
+                case "Total Utilized Budget By Department":
+                    return totalBudgetDepartment();
 
                 case "Exit":
                     return connection.end();
@@ -279,6 +315,10 @@ function addEmployee() {
                         choices: result
                     }
                 ]).then(response => {
+                    if (response.firstName === "" || response.lastName === "") {
+                        console.log("No employee added. Field(s) were blank.")
+                        return initMenu();
+                    }
                     let query = "SELECT id, CONCAT_WS(' ', first_name, last_name) name FROM employee ";
                     query += "ORDER BY id ASC";
                     connection.query(query, (err, res) => {
@@ -528,20 +568,17 @@ function addDepartment() {
                 name: "depName"
             }
         ]).then(response => {
-            if (response.depName !== "") {
-                connection.query("INSERT INTO department SET ?",
-                    [{ name: response.depName }],
-                    (err, res) => {
-                        if (err) throw err;
-                        console.log(`${response.depName} department has been added.`);
-                        addAnother("addDepartment");
-                    });
-
-            } else {
+            if (response.depName == "") {
                 console.log("No department added. Name was blank.")
-                initMenu();
+                return initMenu();
             }
-
+            connection.query("INSERT INTO department SET ?",
+                [{ name: response.depName }],
+                (err, res) => {
+                    if (err) throw err;
+                    console.log(`${response.depName} department has been added.`);
+                    addAnother("addDepartment");
+                });
         });
 }
 
@@ -571,15 +608,15 @@ function removeDepartment() {
                             if (response2.areYouSure === "yes") {
                                 let departmentId = res[result.indexOf(response.selDepartment)].id;
                                 connection.query("DELETE FROM department WHERE ?",
-                                        {
-                                            id: departmentId
-                                        },
-                                        (err, res) => {
-                                            if (err) throw err;
-                                            console.log(`${response.selDepartment} department has been removed.`);
-                                            initMenu();
-                                        }
-                                    );
+                                    {
+                                        id: departmentId
+                                    },
+                                    (err, res) => {
+                                        if (err) throw err;
+                                        console.log(`${response.selDepartment} department has been removed.`);
+                                        initMenu();
+                                    }
+                                );
                             } else {
                                 initMenu();
                             }
@@ -633,18 +670,18 @@ function addRole() {
                                 name: "roleSalary"
                             }
                         ]).then(response => {
-                            if (response.roleTitle !== "" && response.roleSalary !== "") {
-                                connection.query("INSERT INTO role SET ?",
-                                    [{ title: response.roleTitle, salary: response.roleSalary, department_id: departmentId }],
-                                    (err, res) => {
-                                        if (err) throw err;
-                                        console.log(`${response.roleTitle} role has been added.`);
-                                        addAnother("addRole");
-                                    });
-                            } else {
+                            if (response.roleTitle == "" || response.roleSalary == "") {
                                 console.log("No role added. Field(s) were blank.")
-                                initMenu();
+                                return initMenu();
                             }
+                            connection.query("INSERT INTO role SET ?",
+                                [{ title: response.roleTitle, salary: response.roleSalary, department_id: departmentId }],
+                                (err, res) => {
+                                    if (err) throw err;
+                                    console.log(`${response.roleTitle} role has been added.`);
+                                    addAnother("addRole");
+                                });
+
                         });
                 });
         });
@@ -677,15 +714,15 @@ function removeRole() {
                             if (response2.areYouSure === "yes") {
                                 let roleId = res[result.indexOf(response.selRole)].id;
                                 connection.query("DELETE FROM role WHERE ?",
-                                        {
-                                            id: roleId
-                                        },
-                                        (err, res) => {
-                                            if (err) throw err;
-                                            console.log(`${response.selRole} role has been removed.`);
-                                            initMenu();
-                                        }
-                                    );
+                                    {
+                                        id: roleId
+                                    },
+                                    (err, res) => {
+                                        if (err) throw err;
+                                        console.log(`${response.selRole} role has been removed.`);
+                                        initMenu();
+                                    }
+                                );
                             } else {
                                 initMenu();
                             }
@@ -694,4 +731,20 @@ function removeRole() {
         });
     });
 
+}
+
+// Total utilized budget by department
+function totalBudgetDepartment() {
+    let query = "SELECT name department, SUM(salary) salaries FROM ( ";
+    query += "SELECT role_id, COUNT(*) ";
+    query += "FROM employee  ";
+    query += "GROUP BY role_id ";
+    query += ") AS roleCount JOIN role ON role.id = roleCount.role_id ";
+    query += "LEFT JOIN department d ON department_id = d.id ";
+    query += "GROUP BY department_id";
+    connection.query(query, (err, res) => {
+        if (err) throw err;
+        console.table(res)
+        initMenu();
+    })
 }
