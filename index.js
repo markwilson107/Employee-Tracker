@@ -3,62 +3,37 @@ var mysql = require("mysql");
 const inquirer = require("inquirer");
 const cTable = require("console.table");
 const fs = require('fs');
-require("dotenv").config();
+//require("dotenv").config();
 
 // CLASSES
 const Employee = require("./lib/Employee");
 
 // MYSQL SETUP
-// Check if .env exists, if not create it
-if (!fs.existsSync('./.env')) {
-    inquirer
-        .prompt([
-            {
-                type: "input",
-                message: "Please enter name of database:",
-                name: "dbName"
-            },
-            {
-                type: "password",
-                message: "Please enter password for database:",
-                name: "dbPass"
-            }
-        ]).then(response => {
+const connection = mysql.createConnection({
+    host: "localhost",
 
-            fs.writeFile('./.env', 'DB_NAME=' + response.dbName + '\nDB_PASS=' + response.dbPass, function (err) {
-                if (err) throw err;
-                connectDb();
-            });
-        });
+    // Your port; if not 3306
+    port: 3306,
 
-} else {
-    connectDb();
-}
+    // Your username
+    user: "root",
+
+    //password: process.env.DB_PASS,
+    //database: process.env.DB_NAME
+
+    // Your password
+    password: "Mysql7574", //Please enter your database password here
+    database: "employeetracker_db"
+});
 
 // Connect to database
-function connectDb() {
+connection.connect(function (err) {
+    if (err) throw err;
+    console.log("connected as id " + connection.threadId);
+    init();
+});
 
-    var connection = mysql.createConnection({
-        host: "localhost",
 
-        // Your port; if not 3306
-        port: 3306,
-
-        // Your username
-        user: "root",
-
-        // Your password
-        password: process.env.DB_PASS,
-        database: process.env.DB_NAME
-    });
-
-    connection.connect(function (err) {
-        if (err) throw err;
-        console.log("connected as id " + connection.threadId);
-        init();
-    });
-
-}
 
 // Async Get Managers
 async function getManagersAsync(array) {
@@ -226,7 +201,6 @@ function queryEmployees(type, filter) {
     query += "ORDER BY e.id ASC";
     connection.query(query, [filter], (err, res) => {
         if (err) throw err;
-        //console.log(res);
         let employeeArray = [];
         res.forEach(employee => {
             const newEmployee = new Employee(employee.id, employee.first_name, employee.last_name, employee.title, employee.name, employee.salary, employee.manager);
@@ -248,7 +222,6 @@ function employeeByManager() {
         if (err) throw err;
         // Get managers asynchronously 
         getManagersAsync(res).then(result => {
-            //console.log(result);
             inquirer
                 .prompt({
                     name: "selManager",
@@ -272,7 +245,6 @@ function employeeByDepartment() {
         if (err) throw err;
         // Get departments asynchronously 
         getDepartmentsAsync(res).then(result => {
-            //console.log(result);
             inquirer
                 .prompt({
                     name: "selDepartment",
