@@ -22,7 +22,7 @@ const connection = mysql.createConnection({
     //database: process.env.DB_NAME
 
     // Your password
-    password: "Mysql7574", //Please enter your database password here
+    password: "ENTER PASSWORD", //Please enter your database password here
     database: "employeetracker_db"
 });
 
